@@ -1,6 +1,6 @@
 from rest_framework import viewsets, filters
-from .serializers import PostSerializer, TagSerializer, ContactSerializer
-from .models import Post
+from .serializers import PostSerializer, TagSerializer, ContactSerializer, CommentSerializer
+from .models import Post, Comment
 from rest_framework import permissions
 from rest_framework import pagination
 from rest_framework import generics
@@ -9,6 +9,7 @@ from django.core.mail import send_mail
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from .tasks import send_mail_task
+from .serializers import RegisterSerializer, UserSerializer
 
 
 class PageNumberSetPagination(pagination.PageNumberPagination):
@@ -67,3 +68,37 @@ class FeedBackView(APIView):
             return Response({"success": "Отправлено"})
 
 
+class RegisterView(generics.GenericAPIView):
+    permission_classes = [permissions.AllowAny]
+    serializer_class = RegisterSerializer
+
+    def post(self, request, *args,  **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response({
+            "user": UserSerializer(user, context=self.get_serializer_context()).data,
+            "message": "Пользователь успешно создан",
+        })
+    
+
+class ProfileView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = UserSerializer
+
+    def get(self, request, *args,  **kwargs):
+        return Response({
+            "user": UserSerializer(request.user, context=self.get_serializer_context()).data,
+        })
+    
+
+
+class CommentView(generics.ListCreateAPIView):
+    queryset = Comment.objects.all()
+    serializer_class = CommentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        post_slug = self.kwargs['post_slug'].lower()
+        post = Post.objects.get(slug=post_slug)
+        return Comment.objects.filter(post=post)
